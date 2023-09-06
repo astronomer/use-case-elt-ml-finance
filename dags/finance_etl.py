@@ -1,5 +1,4 @@
 from airflow.decorators import dag, task_group, task
-from airflow import Dataset
 from pendulum import datetime
 from astronomer.providers.amazon.aws.sensors.s3 import S3KeySensorAsync
 from astro import sql as aql
@@ -62,10 +61,7 @@ def join_charge_satisfaction(
 
 @dag(
     start_date=datetime(2023, 9, 1),
-    schedule=[
-        Dataset("s3://finance-elt-ml-data/charge"),
-        Dataset("s3://finance-elt-ml-data/satisfaction"),
-    ],
+    schedule="@daily",
     catchup=False,
 )
 def finance_elt():
@@ -111,8 +107,6 @@ def finance_elt():
         ]
 
     input_files = retrieve_input_files()
-
-    # call load and transformation tasks
 
     s3_to_db_glob = LoadFileOperator.partial(
         task_id="s3_to_db_glob",

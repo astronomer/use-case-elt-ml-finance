@@ -1,5 +1,4 @@
 from airflow.decorators import dag, task
-from airflow import Dataset
 from pendulum import datetime
 from airflow.providers.amazon.aws.transfers.local_to_s3 import (
     LocalFilesystemToS3Operator,
@@ -59,16 +58,7 @@ def in_finance_data():
         replace="True",
     ).expand_kwargs(upload_kwargs)
 
-    @task(
-        outlets=[
-            Dataset("s3://finance-elt-ml-data/charge"),
-            Dataset("s3://finance-elt-ml-data/satisfaction"),
-        ],
-    )
-    def data_loaded():
-        print("The finance data has been loaded to the object storage")
-
-    create_bucket >> upload_mock_data >> data_loaded()
+    create_bucket >> upload_mock_data
 
 
 in_finance_data()
