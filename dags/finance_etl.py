@@ -31,7 +31,7 @@ def select_successful_charges(in_charge: Table) -> Table:
 
 
 @aql.transform()
-def avg_successful_per_us_customer(tmp_successful: Table) -> Table:
+def avg_successful_per_customer(tmp_successful: Table) -> Table:
     return """
         SELECT
             customer_id,
@@ -118,7 +118,7 @@ def finance_elt():
         Table(conn_id=DB_CONN_ID, name="in_charge")
     )
     s3_to_db_glob >> tmp_successful
-    tmp_avg_successful_per_us_customer = avg_successful_per_us_customer(tmp_successful)
+    tmp_avg_successful_per_us_customer = avg_successful_per_customer(tmp_successful)
     join_charge_satisfaction(
         tmp_avg_successful_per_us_customer,
         Table(conn_id=DB_CONN_ID, name="in_satisfaction"),
