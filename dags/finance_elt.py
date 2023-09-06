@@ -11,7 +11,7 @@ from astro.constants import FileType
 AWS_CONN_ID = "aws_default"
 DB_CONN_ID = "postgres_default"
 DATA_BUCKET_NAME = "finance-elt-ml-data"
-POKE_INTERVAL = 2
+POKE_INTERVAL = 5*60
 
 
 @aql.transform()
