@@ -125,5 +125,6 @@ def finance_elt():
         output_table=Table(conn_id=DB_CONN_ID, name="model_satisfaction"),
     )
 
+    aql.cleanup()
 
 finance_elt()

@@ -177,6 +177,7 @@ def finance_ml():
             get_logs=True,
             log_events_on_failure=True,
             do_xcom_push=True,
+            queue="machine-learning-tasks" # optional setting for Astro customers
         )
         def train_model_task(feature_eng_table, model_class, hyper_parameters={}):
             model_results = train_model(
