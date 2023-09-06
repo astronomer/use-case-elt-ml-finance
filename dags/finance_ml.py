@@ -12,7 +12,7 @@ import os
 AWS_CONN_ID = "aws_default"
 DB_CONN_ID = "postgres_default"
 DB_SCHEMA = "tmp_astro"
-DATA_BUCKET_NAME = "finance-etl-ml-data"
+DATA_BUCKET_NAME = "finance-elt-ml-data"
 ENVIRONMENT = "local"
 
 

@@ -11,7 +11,7 @@ from astro.constants import FileType
 
 AWS_CONN_ID = "aws_default"
 DB_CONN_ID = "postgres_default"
-DATA_BUCKET_NAME = "finance-etl-ml-data"
+DATA_BUCKET_NAME = "finance-elt-ml-data"
 POKE_INTERVAL = 2
 
 
@@ -62,25 +62,32 @@ def join_charge_satisfaction(
 
 @dag(
     start_date=datetime(2023, 9, 1),
-    schedule="@daily",
+    schedule=[
+        Dataset("s3://finance-elt-ml-data/charge"),
+        Dataset("s3://finance-elt-ml-data/satisfaction"),
+    ],
     catchup=False,
 )
-def finance_etl():
-    wait_for_ingest_charge = S3KeySensorAsync(
-        task_id="wait_for_ingest_charge",
-        poke_interval=POKE_INTERVAL,
-        bucket_key=f"s3://{DATA_BUCKET_NAME}/charge/*.csv",
-        wildcard_match=True,
-        aws_conn_id=AWS_CONN_ID,
+def finance_elt():
+    @task_group(
+        default_args={
+            "aws_conn_id": AWS_CONN_ID,
+            "wildcard_match": True,
+            "poke_interval": POKE_INTERVAL,
+        },
     )
+    def wait_for_ingest():
+        S3KeySensorAsync(
+            task_id="wait_for_ingest_charge",
+            bucket_key=f"s3://{DATA_BUCKET_NAME}/charge/*.csv",
+        )
 
-    wait_for_ingest_satisfaction = S3KeySensorAsync(
-        task_id="wait_for_ingest_satisfaction",
-        poke_interval=POKE_INTERVAL,
-        bucket_key=f"s3://{DATA_BUCKET_NAME}/satisfaction/*.csv",
-        wildcard_match=True,
-        aws_conn_id=AWS_CONN_ID,
-    )
+        S3KeySensorAsync(
+            task_id="wait_for_ingest_satisfaction",
+            bucket_key=f"s3://{DATA_BUCKET_NAME}/satisfaction/*.csv",
+        )
+
+    ingest_done = wait_for_ingest()
 
     @task
     def retrieve_input_files():
@@ -111,6 +118,8 @@ def finance_etl():
         task_id="s3_to_db_glob",
     ).expand_kwargs(input_files)
 
+    ingest_done >> input_files >> s3_to_db_glob
+
     tmp_successful = select_successful_charges(
         Table(conn_id=DB_CONN_ID, name="in_charge")
     )
@@ -122,11 +131,5 @@ def finance_etl():
         output_table=Table(conn_id=DB_CONN_ID, name="model_satisfaction"),
     )
 
-    (
-        [wait_for_ingest_charge, wait_for_ingest_satisfaction]
-        >> input_files
-        >> s3_to_db_glob
-    )
 
-
-finance_etl()
+finance_elt()

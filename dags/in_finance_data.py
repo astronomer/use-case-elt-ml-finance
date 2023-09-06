@@ -1,4 +1,5 @@
 from airflow.decorators import dag, task
+from airflow import Dataset
 from pendulum import datetime
 from airflow.providers.amazon.aws.transfers.local_to_s3 import (
     LocalFilesystemToS3Operator,
@@ -8,7 +9,7 @@ import os
 from include.create_mock_data import generate_mock_data
 
 AWS_CONN_ID = "aws_default"
-DATA_BUCKET_NAME = "finance-etl-ml-data"
+DATA_BUCKET_NAME = "finance-elt-ml-data"
 
 
 @dag(
@@ -16,7 +17,7 @@ DATA_BUCKET_NAME = "finance-etl-ml-data"
     schedule="@daily",
     catchup=False,
 )
-def helper_in_mock_data():
+def in_finance_data():
     @task
     def generate_mock_data_task():
         generate_mock_data()
@@ -58,7 +59,16 @@ def helper_in_mock_data():
         replace="True",
     ).expand_kwargs(upload_kwargs)
 
-    create_bucket >> upload_mock_data
+    @task(
+        outlets=[
+            Dataset("s3://finance-elt-ml-data/charge"),
+            Dataset("s3://finance-elt-ml-data/satisfaction"),
+        ],
+    )
+    def data_loaded():
+        print("The finance data has been loaded to the object storage")
+
+    create_bucket >> upload_mock_data >> data_loaded()
 
 
-helper_in_mock_data()
+in_finance_data()
