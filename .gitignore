@@ -7,4 +7,5 @@ astro
 include/mock_data
 include/minio
 include/postgres
+include/plots
 .DS_Store

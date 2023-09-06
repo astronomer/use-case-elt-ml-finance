@@ -20,23 +20,23 @@ def generate_mock_data():
     def generate_charge(
         stripe_id, country_code, customer_id, satisfaction_speed, product_type
     ):
-        base_amount = random.randint(100, 5000)
+        base_amount = random.randint(100, 200)
 
         multiplier = 1
         if (
             satisfaction_speed >= 6
             and product_type == "product_B"
         ):
-            multiplier = random.uniform(40000.0, 60000.0)
+            multiplier = random.uniform(10, 20)
         elif satisfaction_speed >= 6:
-            multiplier = random.uniform(1500, 2000)
+            multiplier = random.uniform(5, 10)
 
         amount = int(base_amount * multiplier)
         successful = random.random() < 0.95
 
         return {
             "id": stripe_id,
-            "amount": amount if successful else random.randint(50, amount),
+            "amount": amount if successful else random.randint(1, amount),
             "amount_captured": amount if successful else 0,
             "amount_refunded": 0 if successful else random.randint(0, 50),
             "currency": "usd",
@@ -140,7 +140,7 @@ def generate_mock_data():
                     charge_count = 2
                 elif random.random() < 0.3:
                     charge_count = random.randint(3, 6)
-                
+
                 satisfaction = generate_satisfaction(customer_id, country_code)
 
                 for _ in range(charge_count):

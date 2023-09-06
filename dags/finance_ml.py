@@ -7,6 +7,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression, RidgeCV, Lasso
 import numpy as np
+import os
 
 AWS_CONN_ID = "aws_default"
 DB_CONN_ID = "postgres_default"
@@ -133,10 +134,20 @@ def train_model(feature_eng_table, model_class, hyper_parameters):
     print(f"R2 train: {r2_train}")
     print(f"R2 test: {r2_test}")
 
+    y_train_df = y_train.to_frame()
+    y_pred_train_df = pd.DataFrame(y_pred_train, columns=["y_pred_train"])
+    y_test_df = y_test.to_frame()
+    y_pred_test_df = pd.DataFrame(y_pred_test, columns=["y_pred_test"])
+
     return {
+        "model_class_name": model_class.__name__,
         "r2_train": r2_train,
         "r2_test": r2_test,
         "feature_imp_coef": feature_imp_coef,
+        "y_train_df": y_train_df,
+        "y_pred_train_df": y_pred_train_df,
+        "y_test_df": y_test_df,
+        "y_pred_test_df": y_pred_test_df,
     }
 
 
@@ -189,7 +200,9 @@ def finance_ml():
     else:
         raise ValueError(f"Unknown environment: {ENVIRONMENT}")
 
-    train_model_task.partial(feature_eng_table=feature_eng_table).expand_kwargs(
+    model_results = train_model_task.partial(
+        feature_eng_table=feature_eng_table
+    ).expand_kwargs(
         [
             {
                 "model_class": RandomForestRegressor,
@@ -206,6 +219,83 @@ def finance_ml():
             },
         ]
     )
+
+    @task
+    def plot_model_results(model_results):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+
+        if not os.path.exists("include/plots"):
+            os.makedirs("include/plots")
+
+        model_class_name = model_results["model_class_name"]
+        y_train_df = model_results["y_train_df"]
+        y_pred_train_df = model_results["y_pred_train_df"]
+        y_test_df = model_results["y_test_df"]
+        y_pred_test_df = model_results["y_pred_test_df"]
+        r2_train = model_results["r2_train"]
+        r2_test = model_results["r2_test"]
+
+        y_train_df.reset_index(drop=True, inplace=True)
+        y_pred_train_df.reset_index(drop=True, inplace=True)
+        y_test_df.reset_index(drop=True, inplace=True)
+        y_pred_test_df.reset_index(drop=True, inplace=True)
+
+        test_comparison = pd.concat([y_test_df, y_pred_test_df], axis=1)
+        test_comparison.columns = ["True", "Predicted"]
+
+        train_comparison = pd.concat([y_train_df, y_pred_train_df], axis=1)
+        train_comparison.columns = ["True", "Predicted"]
+
+        sns.set_style("white")
+        plt.rcParams["font.size"] = 12
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+
+        sns.scatterplot(
+            ax=axes[0],
+            x="True",
+            y="Predicted",
+            data=train_comparison,
+            color="black",
+            marker="x",
+        )
+        axes[0].plot(
+            [train_comparison["True"].min(), train_comparison["True"].max()],
+            [train_comparison["True"].min(), train_comparison["True"].max()],
+            "--",
+            linewidth=1,
+            color="red",
+        )
+        axes[0].grid(True, linestyle="--", linewidth=0.5)
+        axes[0].set_title(f"Train Set: {model_class_name}")
+        axes[0].text(0.1, 0.9, f"R2: {r2_train}", transform=axes[0].transAxes)
+
+        sns.scatterplot(
+            ax=axes[1],
+            x="True",
+            y="Predicted",
+            data=test_comparison,
+            color="black",
+            marker="x",
+        )
+        axes[1].plot(
+            [test_comparison["True"].min(), test_comparison["True"].max()],
+            [test_comparison["True"].min(), test_comparison["True"].max()],
+            "--",
+            linewidth=1,
+            color="red",
+        )
+        axes[1].grid(True, linestyle="--", linewidth=0.5)
+        axes[1].set_title(f"Test Set: {model_class_name}")
+        axes[1].text(0.1, 0.9, f"R2: {r2_test}", transform=axes[1].transAxes)
+
+        fig.suptitle("Predicted vs True Values", fontsize=16)
+
+        plt.tight_layout()
+        plt.savefig(f"include/plots/{model_class_name}_plot_results.png")
+
+    plot_model_results.expand(model_results=model_results)
 
 
 finance_ml()
