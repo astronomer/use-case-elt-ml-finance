@@ -1,6 +1,6 @@
 """This script generates mock data resembling Stripe charge API payloads as
 well as customer satisfaction scores. The data is generated in a way that
-it creates a cluster of US customers using product B rating speed very highly and 
+it creates a cluster of customers using product B rating speed very highly and 
 spending more money on average per purchase."""
 
 import csv
