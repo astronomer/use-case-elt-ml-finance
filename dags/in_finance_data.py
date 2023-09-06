@@ -15,6 +15,7 @@ DATA_BUCKET_NAME = "finance-elt-ml-data"
     start_date=datetime(2023, 9, 1),
     schedule="@daily",
     catchup=False,
+    tags=["helper"],
 )
 def in_finance_data():
     @task
