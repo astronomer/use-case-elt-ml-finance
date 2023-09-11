@@ -1,3 +1,14 @@
+"""
+### Ingest and transform Stripe data with the Astro Python SDK
+
+This DAG uses deferrable operators to wait for data to land in an 
+S3 bucket, then ingest the data into a database and 
+transform it with SQL using operators from the Astro Python SDK.
+
+You will need to specify an AWS connection `aws_default` and a database connection
+to a database supported by the Astro Python SDK, for example `postgres_default`.
+"""
+
 from airflow.decorators import dag, task_group, task
 from pendulum import datetime
 from astronomer.providers.amazon.aws.sensors.s3 import S3KeySensorAsync

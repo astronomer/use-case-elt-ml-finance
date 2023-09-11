@@ -1,3 +1,15 @@
+"""
+### Engineer features and train machine learning models in parallel on Stripe data
+
+This DAG retrieves Stripe API like data from a relational database, creates 
+machine learning features and trains sci-kit learn machine learning models in 
+parallel, using dynamic task mapping. Finally, plots of the model results are 
+created.
+
+You will need to specify a database connection to a database supported by the
+Astro Python SDK, for example `postgres_default` and an AWS connection `aws_default`.
+"""
+
 from airflow.decorators import dag, task
 from pendulum import datetime
 from astro import sql as aql

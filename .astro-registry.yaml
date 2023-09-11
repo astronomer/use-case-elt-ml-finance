@@ -1,0 +1,7 @@
+# These categories will be applied to all DAGs in the repo.
+categories:
+  - AI + Machine Learning
+# List of DAGs that should be published to the Astronomer Registry.
+dags:
+  - path: dags/finance_elt.py
+  - path: dags/finance_ml.py

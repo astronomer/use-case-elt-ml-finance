@@ -1,3 +1,10 @@
+"""
+### Helper DAG that generated mock data for the finance_elt DAG
+
+This DAG runs a script located in `include/create_mock_data.py` that generates 
+mock data for the finance_elt DAG and loads that mock data to S3/MinIO.
+"""
+
 from airflow.decorators import dag, task
 from pendulum import datetime
 from airflow.providers.amazon.aws.transfers.local_to_s3 import (
