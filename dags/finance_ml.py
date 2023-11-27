@@ -30,7 +30,7 @@ if ENVIRONMENT == "local":
     DB_SCHEMA = "tmp_astro"
 if ENVIRONMENT == "prod":
     DB_CONN_ID = "snowflake_default"
-    DB_SCHEMA = "KENTENDANAS"
+    DB_SCHEMA = "TAMARAFINGERLIN"
 
 
 @aql.dataframe()
