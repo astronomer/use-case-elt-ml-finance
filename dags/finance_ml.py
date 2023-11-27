@@ -18,6 +18,7 @@ from airflow.configuration import conf
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression, RidgeCV, Lasso
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 import numpy as np
 import os
 
@@ -194,31 +195,8 @@ def finance_ml():
         ),
     )
 
-    # @task(
-    #     queue="machine-learning-tasks",
-    # )
-    # def train_model_task(feature_eng_table, model_class=None, hyper_parameters={}):
-    #     model_results = train_model(
-    #         feature_eng_table=feature_eng_table,
-    #         model_class=model_class,
-    #         hyper_parameters=hyper_parameters,
-    #     )
-    #     return model_results
-
     if ENVIRONMENT == "prod":
-        # get the current Kubernetes namespace Airflow is running in
-        namespace = conf.get("kubernetes", "NAMESPACE")
 
-        # @task.kubernetes(
-        #     image="devashishupadhyay/scikit-learn-docker",  # specify your model image here
-        #     in_cluster=True,
-        #     namespace=namespace,
-        #     name="my_model_train_pod",
-        #     get_logs=True,
-        #     log_events_on_failure=True,
-        #     do_xcom_push=True,
-        #     queue="machine-learning-tasks",  # optional setting for Astro customers
-        # )
         @task(
             queue="machine-learning-tasks",
         )
@@ -265,7 +243,7 @@ def finance_ml():
     )
 
     @task
-    def plot_model_results(model_results):
+    def plot_model_results(model_results, aws_conn_id):
         import matplotlib.pyplot as plt
         import seaborn as sns
 
@@ -345,11 +323,12 @@ def finance_ml():
 
             plt.savefig(f"{model_class_name}_plot_results.png")
 
-            s3 = boto3.client(
-                "s3",
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-            )
+            s3 = S3Hook(
+                aws_conn_id=aws_conn_id,
+                transfer_config_args=None,
+                extra_args=None,
+            ).get_conn()
+
             with open(f"{model_class_name}_plot_results.png", "rb") as data:
                 s3.upload_fileobj(
                     data,
@@ -359,7 +338,7 @@ def finance_ml():
                 )
             os.remove(f"{model_class_name}_plot_results.png")
 
-    plot_model_results.expand(model_results=model_results)
+    plot_model_results.partial(aws_conn_id=AWS_CONN_ID).expand(model_results=model_results)
 
 
 finance_ml()
