@@ -12,17 +12,24 @@ to a database supported by the Astro Python SDK, for example `postgres_default`.
 from airflow.decorators import dag, task_group, task
 from pendulum import datetime
 from astronomer.providers.amazon.aws.sensors.s3 import S3KeySensorAsync
+from airflow.providers.amazon.aws.operators.s3 import S3CreateBucketOperator
 from astro import sql as aql
 from astro.files import File
 from astro.sql.table import Table
 from astro.sql.operators.load_file import LoadFileOperator
 from astro.constants import FileType
-
+from astro.databases.snowflake import SnowflakeLoadOptions
+import os
 
 AWS_CONN_ID = "aws_default"
-DB_CONN_ID = "postgres_default"
 DATA_BUCKET_NAME = "finance-elt-ml-data"
-POKE_INTERVAL = 1 * 60
+POKE_INTERVAL = 1 * 10
+
+ENVIRONMENT = os.getenv("MY_ENVIRONMENT", "local")
+if ENVIRONMENT == "local":
+    DB_CONN_ID = "postgres_default"
+if ENVIRONMENT == "prod":
+    DB_CONN_ID = "snowflake_default"
 
 
 @aql.transform()
@@ -76,6 +83,10 @@ def join_charge_satisfaction(
     catchup=False,
 )
 def finance_elt():
+    create_bucket = S3CreateBucketOperator(
+        task_id="create_bucket", aws_conn_id=AWS_CONN_ID, bucket_name=DATA_BUCKET_NAME
+    )
+
     @task_group(
         default_args={
             "aws_conn_id": AWS_CONN_ID,
@@ -95,6 +106,7 @@ def finance_elt():
         )
 
     ingest_done = wait_for_ingest()
+    create_bucket >> ingest_done
 
     @task
     def retrieve_input_files():
@@ -121,9 +133,18 @@ def finance_elt():
 
     s3_to_db_glob = LoadFileOperator.partial(
         task_id="s3_to_db_glob",
+        load_options=[
+            SnowflakeLoadOptions(
+                file_options={"SKIP_HEADER": 1, "SKIP_BLANK_LINES": True},
+                copy_options={"ON_ERROR": "CONTINUE"},
+            )
+        ],
+        max_active_tis_per_dag=1
     ).expand_kwargs(input_files)
 
     ingest_done >> input_files >> s3_to_db_glob
+
+    # Transform Data
 
     tmp_successful = select_successful_charges(
         Table(conn_id=DB_CONN_ID, name="in_charge")

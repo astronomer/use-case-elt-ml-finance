@@ -18,14 +18,20 @@ from airflow.configuration import conf
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression, RidgeCV, Lasso
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 import numpy as np
 import os
 
 AWS_CONN_ID = "aws_default"
-DB_CONN_ID = "postgres_default"
-DB_SCHEMA = "tmp_astro"
 DATA_BUCKET_NAME = "finance-elt-ml-data"
-ENVIRONMENT = "local"
+ENVIRONMENT = os.getenv("MY_ENVIRONMENT", "local")
+
+if ENVIRONMENT == "local":
+    DB_CONN_ID = "postgres_default"
+    DB_SCHEMA = "tmp_astro"
+if ENVIRONMENT == "prod":
+    DB_CONN_ID = "snowflake_default"
+    DB_SCHEMA = "TAMARAFINGERLIN"
 
 
 @aql.dataframe()
@@ -102,13 +108,25 @@ def feature_eng(df: pd.DataFrame):
 
 def train_model(feature_eng_table, model_class, hyper_parameters):
     from sklearn.metrics import r2_score
+    from sklearn.ensemble import RandomForestRegressor
+    from sklearn.linear_model import LinearRegression, RidgeCV, Lasso
+    import pandas as pd
 
     print(f"Training model: {model_class.__name__}")
 
     X_train = feature_eng_table["X_train"]
     X_test = feature_eng_table["X_test"]
-    y_train = feature_eng_table["y_train_df"]["avg_amount_captured"]
-    y_test = feature_eng_table["y_test_df"]["avg_amount_captured"]
+    y_train = feature_eng_table["y_train_df"]
+    y_test = feature_eng_table["y_test_df"]
+
+    y_train.dropna(axis=0, inplace=True)
+    y_test.dropna(axis=0, inplace=True)
+
+    y_train = y_train["avg_amount_captured"]
+    y_test = y_test["avg_amount_captured"]
+
+    X_train.dropna(axis=0, inplace=True)
+    X_test.dropna(axis=0, inplace=True)
 
     y_train = y_train.loc[X_train.index]
     y_test = y_test.loc[X_test.index]
@@ -178,20 +196,11 @@ def finance_ml():
     )
 
     if ENVIRONMENT == "prod":
-        # get the current Kubernetes namespace Airflow is running in
-        namespace = conf.get("kubernetes", "NAMESPACE")
 
-        @task.kubernetes(
-            image="< YOUR MODEL IMAGE >",  # specify your model image here
-            in_cluster=True,
-            namespace=namespace,
-            name="my_model_train_pod",
-            get_logs=True,
-            log_events_on_failure=True,
-            do_xcom_push=True,
-            queue="machine-learning-tasks" # optional setting for Astro customers
+        @task(
+            queue="machine-learning-tasks",
         )
-        def train_model_task(feature_eng_table, model_class, hyper_parameters={}):
+        def train_model_task(feature_eng_table, model_class=None, hyper_parameters={}):
             model_results = train_model(
                 feature_eng_table=feature_eng_table,
                 model_class=model_class,
@@ -202,7 +211,7 @@ def finance_ml():
     elif ENVIRONMENT == "local":
 
         @task
-        def train_model_task(feature_eng_table, model_class, hyper_parameters={}):
+        def train_model_task(feature_eng_table, model_class=None, hyper_parameters={}):
             model_results = train_model(
                 feature_eng_table=feature_eng_table,
                 model_class=model_class,
@@ -234,7 +243,7 @@ def finance_ml():
     )
 
     @task
-    def plot_model_results(model_results):
+    def plot_model_results(model_results, aws_conn_id):
         import matplotlib.pyplot as plt
         import seaborn as sns
 
@@ -306,9 +315,30 @@ def finance_ml():
         fig.suptitle("Predicted vs True Values", fontsize=16)
 
         plt.tight_layout()
-        plt.savefig(f"include/plots/{model_class_name}_plot_results.png")
 
-    plot_model_results.expand(model_results=model_results)
+        if ENVIRONMENT == "local":
+            plt.savefig(f"include/plots/{model_class_name}_plot_results.png")
+        if ENVIRONMENT == "prod":
+            import boto3
+
+            plt.savefig(f"{model_class_name}_plot_results.png")
+
+            s3 = S3Hook(
+                aws_conn_id=aws_conn_id,
+                transfer_config_args=None,
+                extra_args=None,
+            ).get_conn()
+
+            with open(f"{model_class_name}_plot_results.png", "rb") as data:
+                s3.upload_fileobj(
+                    data,
+                    DATA_BUCKET_NAME,
+                    "plots/" + f"{model_class_name}_plot_results.png",
+                    ExtraArgs={"ContentType": "image/jpeg"},
+                )
+            os.remove(f"{model_class_name}_plot_results.png")
+
+    plot_model_results.partial(aws_conn_id=AWS_CONN_ID).expand(model_results=model_results)
 
 
 finance_ml()
