@@ -139,6 +139,7 @@ def finance_elt():
                 copy_options={"ON_ERROR": "CONTINUE"},
             )
         ],
+        max_active_tis_per_dag=1
     ).expand_kwargs(input_files)
 
     ingest_done >> input_files >> s3_to_db_glob
